@@ -1,5 +1,8 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 # Set up page configuration
 st.set_page_config(page_title="GST Invoice Generator", layout="wide")
@@ -14,38 +17,61 @@ def calculate_total(df):
     total_invoice_amount = df['Final Amount'].sum()
     return df, total_invoice_amount
 
-def display_invoice(business_details, billing_details, shipping_details, bank_details, items_df, total_invoice_amount):
-    """Displays the formatted invoice."""
-    st.header("GST Invoice")
+def generate_pdf(business_details, billing_details, shipping_details, bank_details, items_df, total_invoice_amount):
+    """Generates a PDF invoice."""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
 
-    col1, col2 = st.columns(2)
+    # Invoice title
+    c.setFont("Helvetica-Bold", 24)
+    c.drawString(100, 750, "GST Invoice")
 
-    with col1:
-        st.subheader("Seller Details")
-        st.write(f"**Name:** {business_details['business_name']}")
-        st.write(f"**GSTIN:** {business_details['gst_number']}")
-        st.write(f"**Address:** {business_details['address']}")
+    # Seller details
+    c.setFont("Helvetica", 12)
+    c.drawString(50, 700, "Seller Details:")
+    c.drawString(50, 680, f"Name: {business_details['business_name']}")
+    c.drawString(50, 660, f"GSTIN: {business_details['gst_number']}")
+    c.drawString(50, 640, f"Address: {business_details['address']}")
 
-    with col2:
-        st.subheader("Billing Details")
-        st.write(f"**Name:** {billing_details['name']}")
-        st.write(f"**GSTIN:** {billing_details['gst_number']}")
-        st.write(f"**Address:** {billing_details['address']}")
+    # Billing details
+    c.drawString(400, 700, "Billing Details:")
+    c.drawString(400, 680, f"Name: {billing_details['name']}")
+    c.drawString(400, 660, f"GSTIN: {billing_details['gst_number']}")
+    c.drawString(400, 640, f"Address: {billing_details['address']}")
 
-    st.subheader("Shipping Details")
-    st.write(f"**Name:** {shipping_details['name']}")
-    st.write(f"**Address:** {shipping_details['address']}")
+    # Shipping details
+    c.drawString(50, 600, "Shipping Details:")
+    c.drawString(50, 580, f"Name: {shipping_details['name']}")
+    c.drawString(50, 560, f"Address: {shipping_details['address']}")
 
-    st.subheader("Items")
-    st.dataframe(items_df)
+    # Items table
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, 530, "Items")
+    c.setFont("Helvetica", 10)
+    c.drawString(50, 510, "Description | HSN Code | Rate | Quantity | Unit | CGST | SGST | Final Amount")
 
-    st.subheader("Bank Details")
-    st.write(f"**Bank Name:** {bank_details['bank_name']}")
-    st.write(f"**Account Number:** {bank_details['account_number']}")
-    st.write(f"**IFSC Code:** {bank_details['ifsc_code']}")
+    y = 490
+    for index, row in items_df.iterrows():
+        c.drawString(50, y, f"{row['Description']} | {row['HSN Code']} | {row['Rate']:.2f} | {row['Quantity']} | {row['Unit']} | {row['CGST']:.2f} | {row['SGST']:.2f} | {row['Final Amount']:.2f}")
+        y -= 15
 
-    st.subheader("Total Invoice Amount")
-    st.write(f"**₹{total_invoice_amount:,.2f}**")
+    # Bank details
+    c.setFont("Helvetica", 12)
+    c.drawString(50, y - 30, "Bank Details:")
+    c.drawString(50, y - 50, f"Bank Name: {bank_details['bank_name']}")
+    c.drawString(50, y - 70, f"Account Number: {bank_details['account_number']}")
+    c.drawString(50, y - 90, f"IFSC Code: {bank_details['ifsc_code']}")
+
+    # Total invoice amount
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, y - 120, "Total Invoice Amount:")
+    c.drawString(50, y - 140, f"₹{total_invoice_amount:,.2f}")
+
+    c.showPage()
+    c.save()
+
+    pdf_bytes = buffer.getvalue()
+    return pdf_bytes
 
 def main():
     """Main function to run the Streamlit app."""
@@ -97,7 +123,8 @@ def main():
             st.warning("Please add items to the invoice.")
         else:
             items_df, total_invoice_amount = calculate_total(items_df.copy())
-            display_invoice(business_details, billing_details, shipping_details, bank_details, items_df, total_invoice_amount)
+            pdf_bytes = generate_pdf(business_details, billing_details, shipping_details, bank_details, items_df, total_invoice_amount)
+            st.download_button("Download Invoice", data=pdf_bytes, file_name="invoice.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
     main()
